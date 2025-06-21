@@ -18,9 +18,62 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
-  // Verificar se é GET (health check)
+  // Verificar se é GET (health check ou consulta de pagamento)
   if (req.method === 'GET') {
+    const { check_payment } = req.query;
+    
+    if (check_payment) {
+      // Consultar status do pagamento
+      try {
+        console.log(`🔍 Consultando pagamento: ${check_payment}`);
+        
+        // Buscar pagamento pela referência externa
+        const searchResponse = await fetch(`${MP_CONFIG.API_BASE_URL}/v1/payments/search?external_reference=${check_payment}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${MP_CONFIG.ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          
+          if (searchData.results && searchData.results.length > 0) {
+            const payment = searchData.results[0]; // Pegar o primeiro resultado
+            
+            return res.status(200).json({
+              status: payment.status,
+              payment_id: payment.id,
+              external_reference: payment.external_reference,
+              transaction_amount: payment.transaction_amount,
+              payment_method: payment.payment_method_id,
+              date_approved: payment.date_approved,
+              found: true
+            });
+          } else {
+            return res.status(200).json({
+              status: 'not_found',
+              message: 'Pagamento não encontrado',
+              found: false
+            });
+          }
+        } else {
+          throw new Error(`Erro na API: ${searchResponse.status}`);
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro ao consultar pagamento:', error);
+        return res.status(200).json({
+          status: 'error',
+          message: 'Erro ao consultar pagamento',
+          error: error.message,
+          found: false
+        });
+      }
+    }
+    
+    // Health check normal
     return res.status(200).json({
       status: 'ok',
       message: 'Webhook do Mercado Pago ativo',
